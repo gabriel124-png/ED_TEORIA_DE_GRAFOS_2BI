@@ -46,6 +46,8 @@ resultadodafase jogar_fase(const char *origem, const char *destino, int perigo) 
         if (scanf(" %c", &game) != 1) {// Inverte a tela.
             return r;
         }
+        int cac;
+        while((cac = getchar()!='\n' && cac != EOF)){}
         if (game == 'q') { //Retorna caso venceu ou vida chegou a zero.
             return r;
         }
