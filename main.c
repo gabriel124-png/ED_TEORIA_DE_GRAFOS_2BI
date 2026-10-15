@@ -35,6 +35,36 @@ void mostrarvizinhos(grafo *g, int s) {
     }
 }
 
+// Se o sistema nao existe, pergunta se quer criar e coloca ele no mapa num lugar livre.
+// Devolve o indice do sistema ou -1 se nao foi criado.
+int garantirsistema(grafo *g, const char *nome, int referencia, int atual) {
+    char resp;
+    int ch, novo;
+    if (nome[0] >= '0' && nome[0] <= '9') {
+        printf("O numero %s nao existe (so da para criar sistema novo com nome).\n", nome);
+        return -1;
+    }
+    printf("O sistema '%s' nao existe. Criar um sistema novo com esse nome? (s/n): ", nome);
+    if (scanf(" %c", &resp) != 1) {
+        return -1;
+    }
+    while ((ch = getchar()) != '\n' && ch != EOF) { }
+    if (resp != 's' && resp != 'S') {
+        return -1;
+    }
+    novo = criarsistema(g, nome, referencia, atual);
+    if (novo == -1) {
+        printf("Nome invalido (nao pode comecar com numero nem passar de %d letras).\n", MAX_NOME - 1);
+    } else if (novo == -3) {
+        printf("Nao cabe mais nenhum sistema (limite de %d).\n", MAX_SISTEMAS);
+    } else if (novo == -4) {
+        printf("Nao achei lugar livre no mapa para o sistema.\n");
+    } else if (novo >= 0) {
+        printf("Sistema %s criado com o numero %d e colocado no mapa.\n", g->planeta[novo].nome, novo);
+    }
+    return novo;
+}
+
 // deixe pelo menos uma linha de distancia da funcao tempo porque o compilador vai sumir com ela.
 int main() {
     grafo mapa;
@@ -48,6 +78,8 @@ int main() {
     int a = -1, b = -1;     // indices dos sistemas digitados
     int atual;              // sistema onde a nave esta agora (comeca na Terra)
     int peso = 0;           // peso da rota nova
+    int foco;               // sistema novo criado na opcao 6 (o mapa abre centrado nele)
+    int pontoum, pontodois; // indices dos 2 sistemas da rota nova (opcao 6)
     int perigo;             // perigo da fase (vem do peso da rota)
     tempo("lercsv", r = lercsv(&mapa, "mapa.csv"));
     if (r != 0) {
@@ -170,23 +202,41 @@ int main() {
                     break;
                 }
                 while ((ch = getchar()) != '\n' && ch != EOF) { }
-                a = acharsistema(&mapa, nomea);
-                b = acharsistema(&mapa, nomeb);
-                if (a < 0 || b < 0) {
-                    printf("Sistema nao encontrado.\n");
-                } else if (a == b) {
-                    printf("Uma rota precisa ligar dois sistemas diferentes.\n");
-                } else if (peso <= 0) {
+                if (peso <= 0) {
                     printf("O peso precisa ser maior que 0.\n");
-                } else if (acharconexao(&mapa, a, b) != NULL) {
+                    break;
+                }
+                pontoum = acharsistema(&mapa, nomea);
+                pontodois = acharsistema(&mapa, nomeb);
+                foco = -1;                              // sistema novo criado agora (-1 = nenhum)
+                if (pontoum < 0) {                      // sistema novo: cria e coloca no mapa
+                    pontoum = garantirsistema(&mapa, nomea, pontodois, atual);
+                    if (pontoum >= 0) {
+                        foco = pontoum;
+                    }
+                    pontodois = acharsistema(&mapa, nomeb);     // procura de novo (nome igual ao que acabou de criar)
+                }
+                if (pontoum >= 0 && pontodois < 0) {
+                    pontodois = garantirsistema(&mapa, nomeb, pontoum, atual);
+                    if (pontodois >= 0) {
+                        foco = pontodois;
+                    }
+                }
+                if (pontoum < 0 || pontodois < 0) {
+                    printf("Rota cancelada.\n");
+                    if (foco >= 0) navegarmapafoco(&mapa, atual, 0, foco, "Sistema novo = o (a rota nao foi criada). ESC volta ao menu.");
+                } else if (pontoum == pontodois) {
+                    printf("Uma rota precisa ligar dois sistemas diferentes.\n");
+                } else if (acharconexao(&mapa, pontoum, pontodois) != NULL) {
                     printf("Essa rota ja existe.\n");
                 } else {
-                    tempo("adicionarrota", r = adicionarrota(&mapa, a, b, peso));
+                    tempo("adicionarrota", r = adicionarrota(&mapa, pontoum, pontodois, peso));
                     if (r < 0) {
                         printf("Nao foi possivel criar a rota (limite de %d rotas ou sem memoria).\n", MAX_CONEXOES);
                     } else {
-                        printf("Rota %s - %s criada com peso %d.\n", mapa.planeta[a].nome, mapa.planeta[b].nome, peso);
-                        imprimirmapa(&mapa, atual);
+                        printf("Rota %s - %s criada com peso %d.\n", mapa.planeta[pontoum].nome, mapa.planeta[pontodois].nome, peso);
+                        marcarrotanova(pontoum, pontodois);                   // a rota nova fica marcada no mapa com #
+                        navegarmapafoco(&mapa, atual, 0, foco >= 0 ? foco : pontoum,"Rota nova = # | sistema novo = N. Ande com W A S D e aperte ESC para voltar ao menu.");
                     }
                 }
                 break;
@@ -198,7 +248,6 @@ int main() {
                 break;
         }
     } while (opcao != 0);                               // repete ate escolher 0
-
     liberarmapa(&mapa);
     return 0;
 }

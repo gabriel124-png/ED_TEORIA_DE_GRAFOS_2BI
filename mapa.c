@@ -72,25 +72,6 @@ int add_conexao(grafo *g, int sistemaa, int sistemab, tipoderota tipo, float pes
     return 0;
 }
 
-// Dados de TESTE.
-void iniciarmapa(grafo *g) {
-    g->totalsistema = 0;
-    g->totalconexoes = 0;
-    add_sistema(g, "Terra", normal);     // 0
-    add_sistema(g, "Marte", normal);     // 1
-    add_sistema(g, "Jupiter", nexo);     // 2
-    add_sistema(g, "Saturno", normal);   // 3
-    add_sistema(g, "Netuno", normal);    // 4
-    add_sistema(g, "Proxima", nexo);     // 5
-    add_conexao(g, 0, 1, pequeno, 10, 0);
-    add_conexao(g, 0, 2, grande, 40, 2);
-    add_conexao(g, 1, 2, media, 15, 3);
-    add_conexao(g, 2, 3, media, 20, 1);
-    add_conexao(g, 2, 5, grande, 35, 4);
-    add_conexao(g, 3, 4, pequeno, 12, 2);
-    add_conexao(g, 5, 4, media, 25, 0);
-}
-
 // Se o sistema existe devolve o indice; se nao existe, cria e devolve o novo indice.
 int buscarsistema(grafo *g, const char *nome) {
     for (int i = 0; i < g->totalsistema; i++) {
@@ -188,7 +169,9 @@ int acharsistema(grafo *g, const char *nome) {
         return v < g->totalsistema ? v : -1;
     }
     for (int i = 0; i < g->totalsistema; i++)
-        if (mesmonome(g->planeta[i].nome, nome)) return i;
+        if (mesmonome(g->planeta[i].nome, nome)){
+        	return i;
+        }
     return -1;
 }
 
@@ -202,12 +185,42 @@ Conexao *acharconexao(grafo *g, int sistemaa, int sistemab) {
     return NULL;
 }
 
+int novarota [MAX_CONEXOES][2];
+int totalnovas =0;
+
+void marcarrotanova(int pontoum, int pontodois){
+	if (totalnovas < MAX_CONEXOES) {
+        novarota[totalnovas][0] = pontoum;
+        novarota[totalnovas][1] = pontodois;
+        totalnovas++;
+    }
+}
+
+int ehrotanova(int pontoum, int pontodois) {
+    for (int i = 0; i < totalnovas; i++)
+        if ((novarota[i][0] == pontoum && novarota[i][1] == pontodois) || (novarota[i][0] == pontodois && novarota[i][1] == pontoum)){
+            return 1;
+        }
+    return 0;
+}
+
+// Sistemas criados durante o jogo (opcao 6) guardam a posicao aqui, assim o desenho
+// nao muda de lugar toda vez que o mapa e montado de novo.
+int temnovo[MAX_SISTEMAS];      // 1 = esse sistema foi criado no jogo e tem posicao fixa
+int novocol[MAX_SISTEMAS];      // coluna fixa
+int novolin[MAX_SISTEMAS];      // linha fixa
+
 // Descobre a coluna/linha de cada sistema usando a tabela de posicoes.
 // Sistema que nao esta na tabela (nome errado no CSV) vai para a faixa de baixo.
 void posicionar(grafo *g) {
     int extras = 0;
     for (int i = 0; i < g->totalsistema; i++) {
         int achou = -1;
+        if (temnovo[i]) {                                   // criado no jogo: usa a posicao guardada
+            colsis[i] = novocol[i];
+            linsis[i] = novolin[i];
+            continue;
+        }
         for (int k = 0; k < TOTAL_POS; k++)
             if (mesmonome(posicoes[k].nome, g->planeta[i].nome)) { achou = k; break; }
         if (achou >= 0) {
@@ -230,14 +243,12 @@ void desenharrota(int x0, int y0, int x1, int y1, Conexao *c) {
     int passos = adx > ady ? adx : ady;
     int ady2 = ady * 2;                 // uma linha vale ~2 colunas
     char ch;
-
     if (passos < 1) passos = 1;
     if (adx * 2 > 5 * ady2)             ch = '-';
     else if (adx * 5 < 2 * ady2)        ch = '|';
     else                                ch = (dx * dy < 0) ? '/' : '\\';
     if (c->ativa && c->tipo == pequeno) ch = '.';
     if (!c->ativa)                      ch = 'x';
-
     for (int s = 0; s <= passos; s++) {
         int x = x0 + (dx * s * 2 + (dx < 0 ? -passos : passos)) / (2 * passos);
         int y = y0 + (dy * s * 2 + (dy < 0 ? -passos : passos)) / (2 * passos);
@@ -268,6 +279,60 @@ int custotexto(int x, int y, int tam) {
     return custo;
 }
 
+// Conta quantas casas do caminho (x0,y0)-(x1,y1) ja tem alguma coisa desenhada.
+// As 2 casas perto de cada ponta nao contam (e onde fica o sistema e o nome dele).
+int cobertura(int x0, int y0, int x1, int y1) {
+    int dx = x1 - x0, dy = y1 - y0;
+    int adx = dx < 0 ? -dx : dx;
+    int ady = dy < 0 ? -dy : dy;
+    int passos = adx > ady ? adx : ady;
+    int usadas = 0;
+    if (passos < 1) passos = 1;
+    for (int s = 2; s <= passos - 2; s++) {
+        int x = x0 + (dx * s * 2 + (dx < 0 ? -passos : passos)) / (2 * passos);
+        int y = y0 + (dy * s * 2 + (dy < 0 ? -passos : passos)) / (2 * passos);
+        if (x < 0 || x >= MAPA_LARGURA || y < 0 || y >= MAPA_ALTURA) {
+            usadas += 1000;                                 // saiu do mapa: nao serve
+        } else if (canvas[y][x] != ' ') {
+            usadas++;
+        }
+    }
+    return usadas;
+}
+
+// Desenha a rota. Se o caminho reto passa por cima de outra rota (ex: Terra-Magnus
+// passando por Stanton), desvia: sobe ou desce no meio ate achar um caminho livre.
+void desenharrotalivre(int x0, int y0, int x1, int y1, Conexao *c) {
+    int dx = x1 - x0, dy = y1 - y0;
+    int adx = dx < 0 ? -dx : dx;
+    int ady = dy < 0 ? -dy : dy;
+    int passos = adx > ady ? adx : ady;
+    int mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    int reto = cobertura(x0, y0, x1, y1);
+    static const int desvios[6] = { 3, -3, 5, -5, 7, -7 };
+    int melhor = reto, bx = 0, by = 0, achou = 0;
+    if (passos >= 6 && reto * 3 > passos) {                 // mais de 1/3 do caminho esta ocupado
+        for (int k = 0; k < 6; k++) {
+            int wx = mx, wy = my, custo;
+            if (adx >= ady * 2) wy = my + desvios[k];       // rota deitada: desvia para cima/baixo
+            else                wx = mx + desvios[k] * 2;   // rota em pe: desvia para os lados
+            custo = cobertura(x0, y0, wx, wy) + cobertura(wx, wy, x1, y1);
+            if (custo < melhor) {
+                melhor = custo;
+                bx = wx;
+                by = wy;
+                achou = 1;
+            }
+        }
+    }
+    if (achou) {
+        desenharrota(x0, y0, bx, by, c);
+        desenharrota(bx, by, x1, y1, c);
+    } else {
+        desenharrota(x0, y0, x1, y1, c);
+    }
+}
+
 // Monta o mapa inteiro em "canvas". "atual" e onde a nave esta.
 void montarcanvas(grafo *g, int atual) {
     static const int ox[10] = { 2, -1, 0, 0, 1, 1, 0, 0, 0, 0 };    // jeitos de colocar o nome
@@ -279,12 +344,10 @@ void montarcanvas(grafo *g, int atual) {
         canvas[y][MAPA_LARGURA] = '\0';
     }
     posicionar(g);
-
     for (int i = 0; i < g->totalsistema; i++)               // 1) rotas
         for (Conexao *c = g->planeta[i].lista; c != NULL; c = c->proximo)
             if (c->origem < c->destino)                     // cada rota esta em 2 listas: desenha uma vez
                 desenharrota(colsis[c->origem], linsis[c->origem], colsis[c->destino], linsis[c->destino], c);
-
     for (int r = 0; r < TOTAL_REG; r++) {                   // 2) nomes das regioes
         int len = (int)strlen(regioes[r].texto);
         int x0 = regioes[r].x / PIXEL_COLUNA - len / 2;
@@ -293,7 +356,6 @@ void montarcanvas(grafo *g, int atual) {
             if (x0 + k >= 0 && x0 + k < MAPA_LARGURA && y0 >= 0 && y0 < MAPA_ALTURA && canvas[y0][x0 + k] == ' ')
                 canvas[y0][x0 + k] = regioes[r].texto[k];
     }
-
     for (int i = 0; i < g->totalsistema; i++) {             // 3) ponto de cada sistema
         char marca = 'o';
         if (i == atual) marca = '@';
@@ -304,7 +366,6 @@ void montarcanvas(grafo *g, int atual) {
         canvas[linsis[i]][colsis[i]] = marca;
         ocupado[linsis[i]][colsis[i]] = 1;
     }
-
     for (int i = 0; i < g->totalsistema; i++) {             // 4) nomes (com o numero do sistema)
         char texto[MAX_NOME + 24];
         int tam, melhor = 0, customelhor = 1 << 30, x0 = 0, y0 = 0;
@@ -339,6 +400,52 @@ void montarcanvas(grafo *g, int atual) {
             ocupado[y0][x0 + k] = 1;
         }
     }
+}
+
+int criarsistema(grafo *g, const char *nome, int referencia, int atual) {
+    int tam = (int)strlen(nome);
+    int idx, rx, ry, tamlabel, melhor = 1 << 30, bx = -1, by = -1;
+    if (tam == 0 || tam >= MAX_NOME || (nome[0] >= '0' && nome[0] <= '9')){
+    	return -1;
+    }
+    if (acharsistema(g, nome) >= 0){
+    	return -2;
+    }
+    if (g->totalsistema >= MAX_SISTEMAS){
+    	return -3;
+    }
+    idx = g->totalsistema;                                  // o novo sistema ainda nao conta no desenho
+    montarcanvas(g, atual);
+    if (referencia < 0 || referencia >= idx) referencia = atual;
+    rx = colsis[referencia];
+    ry = linsis[referencia];
+    tamlabel = tam + 6;                                     // "Nome 87" mais folga dos lados
+    for (int dy = -16; dy <= 16; dy++) {
+        for (int dx = -50; dx <= 50; dx++) {
+            int x = rx + dx, y = ry + dy, livre = 1, score, cob;
+            if ((dx < 0 ? -dx : dx) < 8 && (dy < 0 ? -dy : dy) < 3) continue;   // longe do vizinho
+            if (x < 3 || x + tamlabel >= MAPA_LARGURA || y < 2 || y >= MAPA_ALTURA - 3) continue;
+            for (int yy = y - 1; yy <= y + 1 && livre; yy++)    // area do ponto e do nome tem que estar vazia
+                for (int xx = x - 1; xx <= x + tamlabel; xx++)
+                    if (canvas[yy][xx] != ' ') { livre = 0; break; }
+            if (!livre) continue;
+            cob = cobertura(rx, ry, x, y);                      // rota ate o vizinho tambem tem que estar livre
+            score = ((dx < 0 ? -dx : dx) / 2 + (dy < 0 ? -dy : dy)) + cob * 10;
+            if (score < melhor){
+            	melhor = score;
+            	bx = x;
+            	by = y;
+            }
+        }
+    }
+    if (bx < 0){
+    	return -4;
+    }
+    idx = add_sistema(g, nome, normal);
+    temnovo[idx] = 1;
+    novocol[idx] = bx;
+    novolin[idx] = by;
+    return idx;
 }
 
 // Teclado sem enter no Linux e Windows.
@@ -386,8 +493,12 @@ int lertecla(void) {
         int ch = getchar();
         return ch == EOF ? 27 : ch;
     }
-    do { n = (int)read(0, &c, 1); } while (n == 0);
-    if (n < 0) return 27;
+    do {
+    	n = (int)read(0, &c, 1);
+    }while(n == 0);
+    if (n < 0){
+    	return 27;
+    }
     if (c == 27) {                          // ESC sozinho ou comeco de seta (ESC [ A)?
         n = (int)read(0, &d, 1);
         if (n == 0) return 27;              // ESC sozinho
@@ -406,7 +517,9 @@ void desenharquadro(grafo *g, int atual, int vx, int vy, int viajar, const char 
     int usado = 0;
     char viz[200];
 
-    for (int i = 0; i < 45; i++) putchar('\n');             // limpa a tela sem system("clear")
+    for (int i = 0; i < 45; i++){
+    	putchar('\n');             // limpa a tela sem system("clear")
+    }
     printf("MAPA GALACTICO  |  voce esta em: %s %d  |  janela: colunas %d-%d de %d, linhas %d-%d de %d\n",
            g->planeta[atual].nome, atual, vx + 1, vx + JANELA_LARGURA, MAPA_LARGURA, vy + 1, vy + JANELA_ALTURA, MAPA_ALTURA);
     printf("+");
@@ -461,16 +574,24 @@ void imprimirmapa(grafo *g, int atual) {
 // Se viajar for 1, digite o numero de um vizinho e Enter: devolve o indice do destino.
 // Devolve -1 se saiu com ESC.
 int navegarmapa(grafo *g, int atual, int viajar) {
+    return navegarmapafoco(g, atual, viajar, atual, "");
+}
+
+// Igual ao navegarmapa, mas abre a janela centrada no sistema "foco" e mostra "aviso" na primeira tela.
+int navegarmapafoco(grafo *g, int atual, int viajar, int foco, const char *aviso) {
     int vx, vy, tecla, nd = 0, destino = -1, fim = 0;
     char digitos[8] = "";
-    char msg[120] = "";
+    char msg[160] = "";
+
+    snprintf(msg, sizeof(msg), "%s", aviso);
+    if (foco < 0 || foco >= g->totalsistema) foco = atual;
 
     if (g->totalsistema == 0) {
         printf("Mapa vazio.\n");
         return -1;
     }
     montarcanvas(g, atual);
-    centralizar(atual, &vx, &vy);
+    centralizar(foco, &vx, &vy);
     modoraw(1);
     while (!fim) {
         desenharquadro(g, atual, vx, vy, viajar, digitos, msg);

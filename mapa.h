@@ -41,6 +41,9 @@ typedef struct {
 void iniciarmapa(grafo *g);
 void imprimirmapa(grafo *g, int atual);      // mostra a janela do mapa envolta da nave.
 int navegarmapa(grafo *g, int atual, int viajar);   // mover no mapa com wasd e sai no esc e retorna um para destino.
+int navegarmapafoco(grafo *g, int atual, int viajar, int foco, const char *aviso);   // igual ao navegarmapa, centrado em foco.
+void marcarrotanova(int pontoum, int pontodois);   // marca a rota como nova (desenhada com #).
+int criarsistema(grafo *g, const char *nome, int referencia, int atual);   // cria sistema novo num lugar livre do mapa.
 int buscarsistema(grafo *g, const char *nome);
 int acharsistema(grafo *g, const char *nome);   //procura sistema.
 Conexao *acharconexao(grafo *g, int a, int b);
