@@ -3,7 +3,8 @@
 #include <time.h>
 #include "mapa.h"
 #include "lercsv.h"
-#include "nave/nave.h"
+#include "fila.h"
+//#include "nave/nave.h"
 
 // AVISO YOKOO.
 // nao tire as \ da funcao tempo porque o compilador nao vai achar o restante da funcao.
@@ -14,7 +15,7 @@
     printf("%s: %.3f ms\n", nome, (double)(final - inicio) * 1000.0 / CLOCKS_PER_SEC); \
 } while (0)
 // Deixe uma linha de espaco da funcao porque a funcao some com ela.
-// Retorna 1 caso a leitura do arquivo e 0 caso não nao leu.
+// Retorna 1 caso a leitura do arquivo e 0 caso nÃ£o nao leu.
 int lernome(char *destino) {
     int lido = scanf("%19s", destino);
     int ch;
@@ -68,7 +69,7 @@ int garantirsistema(grafo *g, const char *nome, int referencia, int atual) {
 // deixe pelo menos uma linha de distancia da funcao tempo porque o compilador vai sumir com ela.
 int main() {
     grafo mapa;
-    resultadodafase resultado;
+    //resultadodafase resultado;
     Conexao *rota;
     char nomea[MAX_NOME], nomeb[MAX_NOME];     // nomes digitados
     int r;                  // retorno do lercsv e das funcoes de rota
@@ -81,11 +82,38 @@ int main() {
     int foco;               // sistema novo criado na opcao 6 (o mapa abre centrado nele)
     int pontoum, pontodois; // indices dos 2 sistemas da rota nova (opcao 6)
     int perigo;             // perigo da fase (vem do peso da rota)
+    int origem;
+    int destino;
+    
     tempo("lercsv", r = lercsv(&mapa, "mapa.csv"));
     if (r != 0) {
         printf("Nao abriu mapa.csv, rode o jogo de dentro da pasta ED_MAPA\n");
         return 1;
     }
+    
+    //Bloqueando essas rotas logo no início, para que o jogador não consiga viajar por elas.
+    bloquearrota(
+        &mapa, 
+        acharsistema(&mapa, "Elysium"),
+        acharsistema(&mapa, "Idris")
+    );
+    bloquearrota(
+        &mapa,
+        acharsistema(&mapa, "Idris"),
+        acharsistema(&mapa, "Rhethor")
+    );
+    bloquearrota(
+        &mapa,
+        acharsistema(&mapa, "Rethor"),
+        acharsistema(&mapa, "Croshaw")
+    );
+    bloquearrota(
+        &mapa,
+        acharsistema(&mapa, "Croshaw"),
+        acharsistema(&mapa, "Nul")
+    );
+
+
     printf("Mapa: %d sistemas, %d rotas\n", mapa.totalsistema, mapa.totalconexoes);
     atual = acharsistema(&mapa, "Terra");       // o jogo sempre comeca na Terra
     if (atual < 0) atual = 0;
@@ -93,10 +121,11 @@ int main() {
         printf("\n=== MAPA ESPACIAL === (voce esta em %s)\n", mapa.planeta[atual].nome);
         printf("1 - Ver o mapa (W A S D anda, ESC volta)\n");
         printf("2 - Ver vizinhos de um sistema\n");
-        printf("3 - Viajar (ve o mapa e digita o numero do vizinho)\n");
-        printf("4 - Existe rota entre dois sistemas?\n");
-        printf("5 - Bloquear uma rota\n");
-        printf("6 - Adicionar uma rota\n");
+        printf("3 - Viajar pelo menor caminho (Fale o ponto de origem e o destino)\n");
+        printf("4 - Viajar (ve o mapa e digita o numero do vizinho)\n");
+        printf("5 - Existe rota entre dois sistemas?\n");
+        printf("6 - Bloquear uma rota\n");
+        printf("7 - Adicionar uma rota\n");
         printf("0 - Sair\n");
         printf("Opcao: ");
         lido = scanf("%d", &opcao);
@@ -124,7 +153,50 @@ int main() {
                     mostrarvizinhos(&mapa, a);
                 }
                 break;
+            
             case 3:
+
+                //Validação rápida inicial
+                origem = atual;
+                destino = acharsistema(&mapa, "Centauri");
+
+                if (destino < 0) {
+                   printf("Sistema de destino nao encontrado.\n");
+                    break;
+                }   
+
+                //Teste se existe conectividade entre os dois sistemas
+                if (!Verificar_Caminho_Existente(&mapa, origem, destino)){
+                    printf("Esse caminho está fora de alcance, não é possível viajar entre esses dois sistemas.\n");
+                    break;
+                } else{
+                    printf("Recalculando o caminho para o lugar que você deseja.\n");
+                }
+
+                //Se houver caminho, roda o Dijkstra
+                int caminho[MAX_SISTEMAS];
+                int tamanho = 0;
+                float Menor_Custo = MenorCaminho(&mapa, origem, destino, caminho, &tamanho);
+
+                if(Menor_Custo < 0){
+                    printf("Não foi possível encontrar  o menor caminho \n");
+                } else{ 
+                    printf("O menor caminho: ");
+
+                    for (int i = 0; i < tamanho; i++) {
+                        printf("%s", mapa.planeta[caminho[i]].nome);
+                        if (i < tamanho - 1) {
+                            printf(" -> ");
+                        }
+                    }
+                    printf("\nCusto total: %.2f\n", Menor_Custo);
+                    
+                }
+
+                break;
+
+            #if 0
+            case 4:
                 b = navegarmapa(&mapa, atual, 1);       // ve o mapa e digita o numero do vizinho
                 if (b < 0) {
                     printf("Viagem cancelada.\n");
@@ -147,7 +219,9 @@ int main() {
                 }
                 imprimirmapa(&mapa, atual);             // o mapa se atualiza sozinho
                 break;
-            case 4:
+
+            #endif
+            case 5:
                 printf("Nome ou numero dos 2 sistemas (ex: Terra 5): ");
                 if (scanf("%19s %19s", nomea, nomeb) != 2) {
                     if (feof(stdin)) { opcao = 0; break; }
@@ -170,7 +244,8 @@ int main() {
                     }
                 }
                 break;
-            case 5:
+            
+            case 6:
                 printf("Nome ou numero dos 2 sistemas da rota (ex: Terra 5): ");
                 if (scanf("%19s %19s", nomea, nomeb) != 2) {
                     if (feof(stdin)) { opcao = 0; break; }
@@ -193,7 +268,7 @@ int main() {
                     }
                 }
                 break;
-            case 6:
+            case 7:
                 printf("Nome ou numero dos 2 sistemas e o peso (ex: Terra 5 3): ");
                 if (scanf("%19s %19s %d", nomea, nomeb, &peso) != 3) {
                     if (feof(stdin)) { opcao = 0; break; }
