@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lercsv.h"
+#include "mapa.h"
+#include "fila.h"
 
 #define MAX_LINHA2 200
 #define MAX_CORTE 15
@@ -19,7 +21,7 @@ int custo(const char *s, int *valor) {
 
 int lercsv(grafo *g, const char *arquivo) {
     FILE *f = fopen(arquivo, "r");
-    if (f == NULL)// Verifica se o arquivo não está vazio.
+    if (f == NULL)// Verifica se o arquivo nÃ£o estÃ¡ vazio.
     return -1;
     g->totalsistema = 0;
     g->totalconexoes = 0;
@@ -43,7 +45,7 @@ int lercsv(grafo *g, const char *arquivo) {
             continue;
         }
 
-        // Verifica se são pares.
+        // Verifica se sÃ£o pares.
         int i = 1;
         while (i < n) {
             int peso;
