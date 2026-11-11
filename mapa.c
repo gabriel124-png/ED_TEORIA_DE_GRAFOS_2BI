@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "mapa.h"
+#include "fila.h"
 
 #ifdef _WIN32
 #include <conio.h>      // _getch(): ler tecla sem Enter no Windows.
@@ -660,4 +661,151 @@ void liberarmapa(grafo *g) {
     }
     g->totalsistema = 0;
     g->totalconexoes = 0;
+}
+
+
+float MenorCaminho(grafo *g, int origem, int destino, int caminho[], int *tamanho) {
+
+    float distancia[MAX_SISTEMAS];
+    int anterior[MAX_SISTEMAS];
+    int visitado[MAX_SISTEMAS];
+
+    // Inicializa a quantidade de sistemas do caminho
+    if (tamanho != NULL) {
+        *tamanho = 0;
+    }
+
+    // Verifica se os parametros sao validos
+    if (g == NULL || caminho == NULL || tamanho == NULL) {
+        return -1.0f;
+    }
+
+    if (origem < 0 || destino < 0 || origem >= g->totalsistema || destino >= g->totalsistema || 
+        g->totalsistema > MAX_SISTEMAS) {
+        return -1.0f;
+    }
+
+    // Inicializa os vetores
+    for (int i = 0; i < g->totalsistema; i++) {
+        distancia[i] = INF;
+        anterior[i] = -1;
+        visitado[i] = 0;
+    }
+
+    distancia[origem] = 0.0f;
+
+    // Algoritmo de Dijkstra
+    for (int i = 0; i < g->totalsistema; i++) {
+
+        int indice = -1;
+        float menor = INF;
+
+        // Encontra o sistema nao visitado mais proximo
+        for (int j = 0; j < g->totalsistema; j++) {
+            if (!visitado[j] && distancia[j] < menor) {
+                menor = distancia[j];
+                indice = j;
+            }
+        }
+
+        // Nenhum outro sistema alcancavel
+        if (indice == -1) {
+            break;
+        }
+
+        visitado[indice] = 1;
+
+        // Chegou ao destino
+        if (indice == destino) {
+            break;
+        }
+
+        // Percorre os vizinhos do sistema atual
+        for (Conexao *rota = g->planeta[indice].lista;
+             rota != NULL;
+             rota = rota->proximo) {
+
+            int vizinho = rota->destino;
+
+            // Ignora rotas bloqueadas e indices invalidos
+            if (!rota->ativa ||
+                vizinho < 0 ||
+                vizinho >= g->totalsistema ||
+                visitado[vizinho]) {
+                continue;
+            }
+
+            // Calcula o custo acumulado
+            float novo_custo = distancia[indice] + rota->peso;
+
+            // Atualiza se encontrou um caminho melhor
+            if (novo_custo < distancia[vizinho]) {
+                distancia[vizinho] = novo_custo;
+                anterior[vizinho] = indice;
+            }
+        }
+    }
+
+    // Verifica se o destino foi alcancado
+    if (distancia[destino] >= INF) {
+        return -1.0f;
+    }
+
+    // Reconstrucao do caminho de tras para frente
+    int invertido[MAX_SISTEMAS];
+    int quantidade = 0;
+    int atual = destino;
+
+    while (atual != -1 && quantidade < MAX_SISTEMAS) {
+        invertido[quantidade++] = atual;
+        atual = anterior[atual];
+    }
+
+    // Confere se o caminho termina na origem
+    if (quantidade == 0 ||
+        invertido[quantidade - 1] != origem) {
+        return -1.0f;
+    }
+
+    // Inverte para ficar origem -> destino
+    for (int i = 0; i < quantidade; i++) {
+        caminho[i] = invertido[quantidade - 1 - i];
+    }
+
+    *tamanho = quantidade;
+
+    return distancia[destino];
+}
+
+
+int Verificar_Caminho_Existente(grafo *g, int origem, int destino){
+    
+    int visitado[MAX_SISTEMAS] = {0}; // Inicializa todos os sistemas como não visitados
+    
+    int fila[MAX_SISTEMAS];
+    int inicio = 0;
+    int fim = 0;
+
+    visitado[origem] = 1;
+
+    fila[fim++] = origem; // Adiciona o sistema de origem à fila
+    //Varredura em largura
+    while(inicio < fim){
+        int indice = fila[inicio++];
+        if(indice == destino){
+            return 1; // Caminho encontrado
+        }
+
+        for(Conexao *rota = g->planeta[indice].lista; rota != NULL; rota = rota->proximo){
+
+            int vizinho = rota->destino;
+
+            //Fim da busca
+            if(rota->ativa && !visitado[vizinho]){
+                visitado[vizinho] = 1;
+                fila[fim++] = vizinho;
+            }
+        }
+    }       
+    return 0;
 }
