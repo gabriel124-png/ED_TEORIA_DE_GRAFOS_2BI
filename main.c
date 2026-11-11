@@ -194,8 +194,7 @@ int main() {
                 }
 
                 break;
-
-            #if 0
+            
             case 4:
                 b = navegarmapa(&mapa, atual, 1);       // ve o mapa e digita o numero do vizinho
                 if (b < 0) {
@@ -219,8 +218,7 @@ int main() {
                 }
                 imprimirmapa(&mapa, atual);             // o mapa se atualiza sozinho
                 break;
-
-            #endif
+            
             case 5:
                 printf("Nome ou numero dos 2 sistemas (ex: Terra 5): ");
                 if (scanf("%19s %19s", nomea, nomeb) != 2) {
