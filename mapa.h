@@ -51,5 +51,7 @@ void liberarmapa(grafo *g);
 int adicionarrota(grafo *g, int sistemaa, int sistemab, int peso);
 int bloquearrota(grafo *g, int a, int b);
 //float caminhominimo(grafo *g, int origem, int destino, int caminho[], int *tam);
+float MenorCaminho(grafo *g, int origem, int destino, int caminho[], int *tamanho);
+int Verificar_Caminho_Existente(grafo *g, int origem, int destino);
 
 #endif
